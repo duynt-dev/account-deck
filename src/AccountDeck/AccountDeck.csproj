@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <AssemblyName>AccountDeck</AssemblyName>
+    <RootNamespace>AccountDeck</RootNamespace>
+    <Version>0.1.0</Version>
+    <Authors>duynt-dev</Authors>
+    <Product>AccountDeck</Product>
+    <Copyright>Copyright (c) 2026 duynt-dev</Copyright>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <!-- Generated from AppIconArt by running AccountDeck.exe with the export-icon switch. -->
+    <ApplicationIcon>..\..\assets\AccountDeck.ico</ApplicationIcon>
+    <!-- Controls are built in code, never through the designer. -->
+    <NoWarn>$(NoWarn);WFO1000</NoWarn>
+  </PropertyGroup>
+
+</Project>
