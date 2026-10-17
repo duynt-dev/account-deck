@@ -337,75 +337,57 @@ internal sealed class ScrollView : PaintedControl
     }
 }
 
-/// <summary>Selectable row for an installed app: icon, name, path and a checkbox.</summary>
-internal sealed class AppChoiceRow : PaintedControl
+/// <summary>Rounded text input that matches the search box; the real TextBox is <see cref="Box"/>.</summary>
+internal sealed class TextField : PaintedControl
 {
-    readonly Bitmap? _icon;
-    bool _checked;
-
-    public AppChoiceRow(FoundApp app, bool isChecked, int width)
+    public TextField(string text, bool multiline = false, int lines = 1)
     {
-        App = app;
-        _checked = isChecked;
-        _icon = AppIcons.ForExe(app.ExePath);
-        Size = new Size(width, Theme.S(60));
-        Margin = new Padding(0, 0, 0, Theme.S(6));
-        Cursor = Cursors.Hand;
-        TabStop = true;
+        Box = new TextBox
+        {
+            Text = text,
+            Multiline = multiline,
+            BorderStyle = BorderStyle.None,
+            BackColor = Theme.InputBack,
+            ForeColor = Theme.Text,
+            Font = Theme.Body,
+            ScrollBars = multiline ? ScrollBars.Vertical : ScrollBars.None,
+        };
+        if (multiline) Theme.DarkScrollBars(Box);
+        Box.GotFocus += (_, _) => Invalidate();
+        Box.LostFocus += (_, _) => Invalidate();
+        Box.EnabledChanged += (_, _) => { Box.BackColor = Box.Enabled ? Theme.InputBack : Theme.Window; Invalidate(); };
+        Box.FontChanged += (_, _) => FitHeight();
+        Controls.Add(Box);
+        _lines = Math.Max(1, lines);
+        Cursor = Cursors.IBeam;
+        FitHeight();
     }
 
-    public FoundApp App { get; }
+    readonly int _lines;
 
-    public bool Checked
+    public TextBox Box { get; }
+
+    void FitHeight() =>
+        Height = Box.Multiline ? Box.Font.Height * _lines + Theme.S(18) : Math.Max(Theme.S(36), Box.PreferredHeight + Theme.S(16));
+
+    protected override void OnClick(EventArgs e) { Box.Focus(); base.OnClick(e); }
+
+    protected override void OnLayout(LayoutEventArgs e)
     {
-        get => _checked;
-        set { if (_checked != value) { _checked = value; Invalidate(); } }
+        base.OnLayout(e);
+        if (Box is null) return; // the base constructor lays out before Box exists
+        var pad = Theme.S(11);
+        if (Box.Multiline)
+            Box.SetBounds(pad, Theme.S(8), Width - pad - Theme.S(4), Height - Theme.S(14));
+        else
+            Box.SetBounds(pad, (Height - Box.Height) / 2, Width - 2 * pad, Box.Height);
     }
-
-    protected override void OnClick(EventArgs e)
-    {
-        Checked = !Checked;
-        Focus();
-        base.OnClick(e);
-    }
-
-    protected override void OnKeyDown(KeyEventArgs e)
-    {
-        if (e.KeyCode == Keys.Space) Checked = !Checked;
-        base.OnKeyDown(e);
-    }
-
-    protected override void OnGotFocus(EventArgs e) { Invalidate(); base.OnGotFocus(e); }
-    protected override void OnLostFocus(EventArgs e) { Invalidate(); base.OnLostFocus(e); }
 
     protected override void OnPaint(PaintEventArgs e)
     {
         var g = Prepare(e);
         var r = new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f);
-        var radius = Theme.S(10f);
-        FillRound(g, r, radius, Checked ? Theme.Selected : Hover ? Theme.CardHover : Theme.Card);
-        StrokeRound(g, r, radius, Checked ? Color.FromArgb(150, Theme.Accent) : Focused ? Theme.Faint : Theme.Border);
-
-        var icon = Theme.S(32);
-        var iconRect = new Rectangle(Theme.S(14), (Height - icon) / 2, icon, icon);
-        if (_icon is not null)
-        {
-            g.InterpolationMode = InterpolationMode.HighQualityBicubic;
-            g.DrawImage(_icon, iconRect);
-        }
-        else
-        {
-            BadgeIcon.Paint(g, iconRect, Theme.Faint, App.Name[..1].ToUpperInvariant());
-        }
-
-        var x = iconRect.Right + Theme.S(14);
-        var width = Width - x - Theme.S(52);
-        TextRenderer.DrawText(g, App.Name, Theme.BodyBold, new Rectangle(x, Theme.S(11), width, Theme.S(20)), Theme.Text,
-            TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPadding);
-        TextRenderer.DrawText(g, App.ExePath, Theme.Small, new Rectangle(x, Theme.S(32), width, Theme.S(18)), Theme.Faint,
-            TextFormatFlags.SingleLine | TextFormatFlags.PathEllipsis | TextFormatFlags.NoPadding);
-
-        var box = Theme.S(20f);
-        ToggleCheck.DrawBox(g, new RectangleF(Width - Theme.S(36f), (Height - box) / 2f, box, box), Checked, Hover || Focused);
+        FillRound(g, r, Theme.S(8f), Box.Enabled ? Theme.InputBack : Theme.Window);
+        StrokeRound(g, r, Theme.S(8f), Box.Focused ? Theme.Accent : Theme.Border);
     }
 }

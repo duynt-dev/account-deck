@@ -177,11 +177,15 @@ internal sealed class DeckHost : ApplicationContext
         var accounts = ClaudeAccounts();
         if (accounts.Count == 0) return;
 
-        // An account matches when its last import, or its note, has the export's e-mail.
-        var email = ClaudeExport.EmailInArchive(zipPath);
-        var matches = email is null
-            ? new List<(AppEntry App, AccountProfile Account)>()
-            : accounts.Where(x =>
+        // Best signal first: the account id read from the profile's own settings, then the
+        // e-mail of an earlier import, then an e-mail typed into the account's note.
+        var owner = ClaudeExport.OwnerInArchive(zipPath);
+        var email = owner?.Email;
+        var matches = owner?.Uuid is { } uuid
+            ? accounts.Where(x => string.Equals(ClaudeLocalInfo.AccountUuid(x.App, x.Account), uuid, StringComparison.OrdinalIgnoreCase)).ToList()
+            : new List<(AppEntry App, AccountProfile Account)>();
+        if (matches.Count != 1 && email is not null)
+            matches = accounts.Where(x =>
                     string.Equals(ClaudeExport.ImportedEmail(x.Account), email, StringComparison.OrdinalIgnoreCase) ||
                     x.Account.Note.Contains(email, StringComparison.OrdinalIgnoreCase))
                 .ToList();
@@ -294,10 +298,10 @@ internal sealed class DeckHost : ApplicationContext
         menu.Items.Add(autostart);
         var hide = Theme.Item("Hide manager after opening an account", () =>
         {
-            Store.Config.HideAfterLaunch = !Store.Config.HideAfterLaunch;
+            Store.Config.HideManagerAfterLaunch = !Store.Config.HideManagerAfterLaunch;
             Store.Save();
         });
-        hide.Checked = Store.Config.HideAfterLaunch;
+        hide.Checked = Store.Config.HideManagerAfterLaunch;
         menu.Items.Add(hide);
         var autoImport = Theme.Item("Auto-import Claude exports from Downloads", () =>
         {

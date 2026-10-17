@@ -61,7 +61,7 @@ public sealed class DeckConfig
     public List<AppEntry> Apps { get; set; } = new();
 
     /// <summary>Hide the manager after an account has been opened from it.</summary>
-    public bool HideAfterLaunch { get; set; } = true;
+    public bool HideManagerAfterLaunch { get; set; }
 
     /// <summary>Closing the manager keeps AccountDeck running in the tray.</summary>
     public bool CloseToTray { get; set; } = true;

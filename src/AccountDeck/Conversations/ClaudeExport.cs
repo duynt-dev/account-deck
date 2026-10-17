@@ -16,6 +16,9 @@ public sealed record ExportConversation(
     public string SearchText => _searchText ??= (Title + "\n" + string.Join("\n", Messages.Select(m => m.Text))).ToLowerInvariant();
 }
 
+/// <summary>The Claude account an export belongs to (from users.json).</summary>
+public sealed record ExportOwner(string? Email, string? Uuid);
+
 public sealed record ExportLibrary(IReadOnlyList<ExportConversation> Conversations, string? AccountEmail, DateTime ImportedAt);
 
 /// <summary>
@@ -90,8 +93,8 @@ public static class ClaudeExport
         }
     }
 
-    /// <summary>The e-mail of the account an export came from, read from its users.json.</summary>
-    public static string? EmailInArchive(string zipPath)
+    /// <summary>The account an export came from, read from its users.json.</summary>
+    public static ExportOwner? OwnerInArchive(string zipPath)
     {
         try
         {
@@ -99,7 +102,7 @@ public static class ClaudeExport
             var entry = FindEntry(zip, UsersFile);
             if (entry is null) return null;
             using var reader = new StreamReader(entry.Open());
-            return EmailFromUsersJson(reader.ReadToEnd());
+            return OwnerFromUsersJson(reader.ReadToEnd());
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
         {
@@ -107,12 +110,14 @@ public static class ClaudeExport
         }
     }
 
-    /// <summary>The e-mail recorded by the last import for this account, if any.</summary>
-    public static string? ImportedEmail(AccountProfile account)
+    /// <summary>The account recorded by the last import for this profile, if any.</summary>
+    public static ExportOwner? ImportedOwner(AccountProfile account)
     {
         var users = Path.Combine(FolderOf(account), UsersFile);
-        return File.Exists(users) ? ReadEmail(users) : null;
+        return File.Exists(users) ? OwnerFromUsersJson(File.ReadAllText(users)) : null;
     }
+
+    public static string? ImportedEmail(AccountProfile account) => ImportedOwner(account)?.Email;
 
     public static string ToMarkdown(ExportConversation conversation)
     {
@@ -214,16 +219,16 @@ public static class ClaudeExport
         _ => sender,
     };
 
-    static string? ReadEmail(string usersFile) => EmailFromUsersJson(File.ReadAllText(usersFile));
+    static string? ReadEmail(string usersFile) => OwnerFromUsersJson(File.ReadAllText(usersFile))?.Email;
 
-    static string? EmailFromUsersJson(string json)
+    static ExportOwner? OwnerFromUsersJson(string json)
     {
         try
         {
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
             var first = root.ValueKind == JsonValueKind.Array ? root.EnumerateArray().FirstOrDefault() : root;
-            return first.ValueKind == JsonValueKind.Object ? Str(first, "email_address") : null;
+            return first.ValueKind == JsonValueKind.Object ? new ExportOwner(Str(first, "email_address"), Str(first, "uuid")) : null;
         }
         catch (JsonException)
         {

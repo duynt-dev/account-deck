@@ -26,9 +26,13 @@ internal sealed class MainForm : Form
         Theme.StyleForm(this);
         Text = "AccountDeck";
         Icon = host.AppIcon;
-        Size = new Size(Theme.S(1040), Theme.S(680));
         MinimumSize = new Size(Theme.S(780), Theme.S(480));
-        StartPosition = FormStartPosition.CenterScreen;
+
+        // Open large but never beyond 90% of the screen the mouse is on, centred on it.
+        var area = Screen.FromPoint(Cursor.Position).WorkingArea;
+        Size = new Size(Math.Min(Theme.S(1240), area.Width * 9 / 10), Math.Min(Theme.S(800), area.Height * 9 / 10));
+        StartPosition = FormStartPosition.Manual;
+        Location = new Point(area.Left + (area.Width - Width) / 2, area.Top + (area.Height - Height) / 2);
 
         // Sidebar: brand, app list, "add app".
         var sidebar = new Panel { Dock = DockStyle.Left, Width = Theme.S(240), BackColor = Theme.Sidebar, Padding = new Padding(Theme.S(12), Theme.S(14), Theme.S(12), Theme.S(14)) };
@@ -42,17 +46,12 @@ internal sealed class MainForm : Form
         _apps = new ItemList(48) { Dock = DockStyle.Fill, BackColor = Theme.Sidebar, Painter = PaintAppRow };
         _apps.SelectionChanged += (_, _) => ShowApp(_apps.SelectedItem as AppEntry);
         _apps.ItemMenuRequested += (_, p) => ShowAppMenu(_apps.PointToScreen(p));
-        var sidebarButtons = new TableLayoutPanel { Dock = DockStyle.Bottom, Height = Theme.S(36), ColumnCount = 2, Margin = Padding.Empty };
-        sidebarButtons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        sidebarButtons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        var addApp = new PillButton("+  Add app") { Dock = DockStyle.Fill, Margin = new Padding(0, 0, Theme.S(4), 0) };
+        _apps.AllowReorder = true;
+        _apps.ItemMoved += (_, move) => MoveAppTo(move.From, move.To);
+        var addApp = new PillButton("Manage apps") { Dock = DockStyle.Bottom };
         addApp.Click += (_, _) => AddApp();
-        var scan = new PillButton("Scan PC") { Dock = DockStyle.Fill, Margin = new Padding(Theme.S(4), 0, 0, 0) };
-        scan.Click += (_, _) => ScanForApps();
-        sidebarButtons.Controls.Add(addApp, 0, 0);
-        sidebarButtons.Controls.Add(scan, 1, 0);
         sidebar.Controls.Add(_apps);
-        sidebar.Controls.Add(sidebarButtons);
+        sidebar.Controls.Add(addApp);
         sidebar.Controls.Add(caption);
         sidebar.Controls.Add(brand);
 
@@ -199,7 +198,11 @@ internal sealed class MainForm : Form
         for (var i = 0; i < _visibleAccounts.Count; i++)
         {
             var account = _visibleAccounts[i];
-            var card = new AccountCard(_current, account, i) { Running = _host.Running.ContainsKey(account.Id) };
+            var card = new AccountCard(_current, account, i)
+            {
+                Running = _host.Running.ContainsKey(account.Id),
+                Identity = AccountIdentity.Find(_current, account),
+            };
             card.OpenRequested += (_, _) => OpenAccount(account);
             card.MenuRequested += (_, p) => ShowAccountMenu(account, card.PointToScreen(p));
             _cards.Controls.Add(card);
@@ -229,38 +232,16 @@ internal sealed class MainForm : Form
     void OpenAccount(AccountProfile account)
     {
         if (_current is null) return;
-        if (_host.Open(_current, account, this) && Store.Config.HideAfterLaunch) Hide();
+        if (_host.Open(_current, account, this) && Store.Config.HideManagerAfterLaunch) Hide();
     }
 
     void AddApp()
     {
-        using var dialog = new AppDialog(null);
-        if (dialog.ShowDialog(this) != DialogResult.OK) return;
-        Store.Config.Apps.Add(dialog.Result);
-        _current = dialog.Result;
-        Store.Save();
-    }
-
-    async void ScanForApps()
-    {
-        UseWaitCursor = true;
-        List<FoundApp> found;
-        try
-        {
-            var existing = Store.Apps.ToList();
-            found = await Task.Run(() => AppScanner.Scan(existing));
-        }
-        finally
-        {
-            UseWaitCursor = false;
-        }
-
-        using var dialog = new ScanAppsDialog(found);
-        if (dialog.ShowDialog(this) != DialogResult.OK || dialog.Selected.Count == 0) return;
-        var added = dialog.Selected.Select(f => f.ToAppEntry()).ToList();
-        Store.Config.Apps.AddRange(added);
-        _current = added[0];
-        Store.Save();
+        // The dialog saves every change itself; the store's Changed event refreshes this window.
+        var existing = Store.Apps.ToList();
+        using var dialog = new ManageAppsDialog(Store, () => AppScanner.Scan(existing));
+        dialog.ShowDialog(this);
+        if (dialog.LastAdded is { } added && Store.Apps.Contains(added)) ReloadApps(added);
     }
 
     void EditApp(AppEntry? app)
@@ -283,12 +264,18 @@ internal sealed class MainForm : Form
 
     void MoveApp(AppEntry app, int delta)
     {
+        var from = Store.Config.Apps.IndexOf(app);
+        MoveAppTo(from, from + delta);
+    }
+
+    void MoveAppTo(int from, int to)
+    {
         var list = Store.Config.Apps;
-        var from = list.IndexOf(app);
-        var to = from + delta;
-        if (from < 0 || to < 0 || to >= list.Count) return;
+        if (from < 0 || from >= list.Count || to < 0 || to >= list.Count || from == to) return;
+        var app = list[from];
         list.RemoveAt(from);
         list.Insert(to, app);
+        _current = app;
         Store.Save();
     }
 

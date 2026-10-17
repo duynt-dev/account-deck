@@ -14,6 +14,7 @@ Windows multi-account launcher and switcher (C# / .NET 9 WinForms). Original cod
 - Controls are created in code; `WFO1000` is suppressed on purpose.
 - An account with an empty `DataDir` is the app's normal sign-in and is launched without isolation.
 - Never read or reuse another app's cookies/tokens; conversation access is only through official exports.
+- Allowed metadata reads: Chromium `Local State` profile names, Claude settings files keyed by account id, and — with the owner's approval — the single key `lastKnownAccountUuid` from Claude's `config.json`, read with a forward-only `Utf8JsonReader` that skips every other value (`ClaudeLocalInfo`). Do not widen this to other keys in that file.
 
 ## Build
 

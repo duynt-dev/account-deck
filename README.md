@@ -41,7 +41,7 @@ AccountDeck gives every account its own data folder, so each sign-in keeps its o
 | **Manager window** | Your apps are listed on the left. Each account of the selected app appears as a card that shows whether it is running. |
 | **Quick switcher** | Press `Ctrl+Alt+A` anywhere, type part of an app or account name, then press `Enter`. If that account is already open, its window comes to the front; otherwise the account starts. |
 | **Tray menu** | Every app and account is one click away. You can also turn on start-with-Windows and other options here. |
-| **Scan PC** | Finds installed apps and groups them by how well they support several accounts. |
+| **Manage apps** | A grid of installed apps, grouped by type. Tick an app to add it, untick one to remove it. |
 | **Desktop shortcuts** | Create one per account, each with its own coloured icon. |
 | **Any app** | Pick a preset or any `.exe`, then choose how its accounts are kept apart. |
 | **Claude conversations** | Imports Claude's official data export from your Downloads folder. You can browse and search the chats, and carry any conversation over to another account. |
@@ -79,7 +79,7 @@ See [Building from source](#building-from-source).
 ## Getting started
 
 1. **Start AccountDeck.** On the first run it detects supported apps that are already installed (for example Claude, Chrome and Edge) and adds them, each with a **Default** account. The Default account is your normal, existing sign-in.
-2. **Add more apps**, if you need them. Click **Scan PC** to see what else is installed, or **+ Add app** to pick any program by hand.
+2. **Add or remove apps.** Click **Manage apps**. It shows the apps already in your list (ticked) and the other apps installed on your PC, grouped by type. Tick an app to add it, untick one to remove it, or use **Browse for a program…** to add any other app.
 3. **Create an account.** Select an app, click **+ New account**, type a name such as *Work*, then click **Create**. AccountDeck creates a separate data folder for that account automatically.
 4. **Open it.** Click the card. The app starts with an empty profile, so you can sign in with a different account. Your Default account keeps running alongside it.
 5. **Switch quickly.** Press `Ctrl+Alt+A`, type `work`, then press `Enter`.
@@ -132,7 +132,7 @@ All settings are stored in `%APPDATA%\AccountDeck\config.json`. Quit AccountDeck
 | Setting | Default | Description |
 | --- | --- | --- |
 | `QuickSwitchHotkey` | `"Ctrl+Alt+A"` | Global shortcut for the quick switcher, for example `"Ctrl+Shift+Space"`. |
-| `HideAfterLaunch` | `true` | Hide the manager window after it opens an account. |
+| `HideManagerAfterLaunch` | `false` | Hide the manager window after it opens an account. |
 | `CloseToTray` | `true` | Closing the window keeps AccountDeck running in the tray. |
 | `AutoImportClaudeExports` | `true` | Watch the Downloads folder for Claude data exports. |
 

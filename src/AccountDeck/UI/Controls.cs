@@ -181,6 +181,9 @@ internal sealed class AccountCard : PaintedControl
     public int Index { get; }
 
     bool _running;
+    /// <summary>Who the account is signed in as, when it can be told (see <see cref="AccountIdentity"/>).</summary>
+    public string? Identity { get; init; }
+
     public bool Running
     {
         get => _running;
@@ -221,6 +224,8 @@ internal sealed class AccountCard : PaintedControl
         TextRenderer.DrawText(g, Account.Name, Theme.Heading, new Rectangle(x, Theme.S(17), width, Theme.S(22)), Theme.Text, flags);
 
         var note = Account.Note.Length > 0 ? Account.Note : Account.IsDefault ? "Normal sign-in" : "Isolated account";
+        if (Identity is { } who && !note.Contains(who, StringComparison.OrdinalIgnoreCase))
+            note = Account.Note.Length > 0 ? $"{who} · {Account.Note}" : who;
         TextRenderer.DrawText(g, note, Theme.Small, new Rectangle(x, Theme.S(41), width, Theme.S(18)), Theme.Dim, flags);
 
         // Status line.
@@ -282,6 +287,14 @@ internal sealed class ItemList : PaintedControl
     int _hover = -1;
     int _scroll;
 
+    // Drag-to-reorder state.
+    int _dragFrom = -1;
+    Point _dragStart;
+    bool _dragging;
+    int _dropSlot = -1;
+    int _dragY;
+    bool _suppressClick;
+
     public ItemList(int itemHeight)
     {
         ItemHeight = Theme.S(itemHeight);
@@ -299,6 +312,12 @@ internal sealed class ItemList : PaintedControl
     public event EventHandler? SelectionChanged;
     public event EventHandler? ItemActivated;
     public event EventHandler<Point>? ItemMenuRequested;
+
+    /// <summary>Lets the user drag rows up and down; <see cref="ItemMoved"/> reports the result.</summary>
+    public bool AllowReorder { get; set; }
+
+    /// <summary>Raised after a drag moved the item at From to index To.</summary>
+    public event EventHandler<(int From, int To)>? ItemMoved;
 
     public void SetItems(IEnumerable<object> items, object? keepSelected = null)
     {
@@ -352,7 +371,28 @@ internal sealed class ItemList : PaintedControl
         {
             var bounds = new Rectangle(0, i * ItemHeight - _scroll, Width, ItemHeight);
             if (bounds.Top > Height) break;
-            Painter(g, bounds, _items[i], i == SelectedIndex, i == _hover);
+            Painter(g, bounds, _items[i], i == SelectedIndex, i == _hover && !_dragging);
+            if (_dragging && i == _dragFrom)
+            {
+                // Fade the row being dragged; its ghost follows the mouse below.
+                using var veil = new SolidBrush(Color.FromArgb(170, ParentBack));
+                g.FillRectangle(veil, bounds);
+            }
+        }
+
+        if (_dragging && _dragFrom >= 0 && _dragFrom < _items.Count)
+        {
+            var lineY = _dropSlot * ItemHeight - _scroll;
+            using (var pen = new Pen(Theme.Accent, Theme.S(2f)))
+                g.DrawLine(pen, Theme.S(10f), lineY, Width - Theme.S(10f), lineY);
+            var dot = Theme.S(7f);
+            using (var brush = new SolidBrush(Theme.Accent))
+                g.FillEllipse(brush, Theme.S(5f), lineY - dot / 2, dot, dot);
+
+            var ghost = new Rectangle(0, _dragY - ItemHeight / 2, Width, ItemHeight);
+            using (var shadow = new SolidBrush(Color.FromArgb(90, 0, 0, 0)))
+                FillRound(g, new RectangleF(ghost.X + Theme.S(3f), ghost.Y + Theme.S(5f), ghost.Width - Theme.S(4f), ghost.Height - Theme.S(4f)), Theme.S(9f), shadow.Color);
+            Painter(g, ghost, _items[_dragFrom], true, true);
         }
 
         // Slim scroll indicator, only when the list overflows.
@@ -367,6 +407,27 @@ internal sealed class ItemList : PaintedControl
 
     protected override void OnMouseMove(MouseEventArgs e)
     {
+        if (AllowReorder && _dragFrom >= 0 && e.Button == MouseButtons.Left)
+        {
+            if (!_dragging && Math.Abs(e.Y - _dragStart.Y) >= SystemInformation.DragSize.Height)
+            {
+                _dragging = true;
+                Capture = true;
+            }
+            if (_dragging)
+            {
+                // Scroll when the drag nears the top or bottom edge.
+                if (e.Y < ItemHeight / 2) _scroll = Math.Max(0, _scroll - Theme.S(8));
+                else if (e.Y > Height - ItemHeight / 2) _scroll = Math.Min(MaxScroll, _scroll + Theme.S(8));
+                _dragY = Math.Clamp(e.Y, 0, Height);
+                _dropSlot = Math.Clamp((int)Math.Round((e.Y + _scroll) / (double)ItemHeight), 0, _items.Count);
+                Cursor = Cursors.SizeNS;
+                Invalidate();
+                base.OnMouseMove(e);
+                return;
+            }
+        }
+
         var i = IndexAt(e.Location);
         if (i != _hover) { _hover = i; Invalidate(); }
         Cursor = i >= 0 ? Cursors.Hand : Cursors.Default;
@@ -385,12 +446,53 @@ internal sealed class ItemList : PaintedControl
         var i = IndexAt(e.Location);
         if (i < 0) return;
         Select(i);
+        if (e.Button == MouseButtons.Left)
+        {
+            _dragFrom = i;
+            _dragStart = e.Location;
+        }
         if (e.Button == MouseButtons.Right) ItemMenuRequested?.Invoke(this, e.Location);
+    }
+
+    protected override void OnMouseUp(MouseEventArgs e)
+    {
+        if (_dragging)
+        {
+            var from = _dragFrom;
+            var to = _dropSlot > from ? _dropSlot - 1 : _dropSlot;
+            EndDrag();
+            _suppressClick = true;
+            if (to != from && to >= 0 && to < _items.Count)
+            {
+                var item = _items[from];
+                _items.RemoveAt(from);
+                _items.Insert(to, item);
+                SelectedIndex = to;
+                Invalidate();
+                ItemMoved?.Invoke(this, (from, to));
+            }
+        }
+        _dragFrom = -1;
+        base.OnMouseUp(e);
+    }
+
+    void EndDrag()
+    {
+        _dragging = false;
+        _dropSlot = -1;
+        Capture = false;
+        Cursor = Cursors.Default;
+        Invalidate();
     }
 
     protected override void OnMouseClick(MouseEventArgs e)
     {
         base.OnMouseClick(e);
+        if (_suppressClick)
+        {
+            _suppressClick = false;
+            return;
+        }
         if (e.Button == MouseButtons.Left && IndexAt(e.Location) == SelectedIndex) Activate();
     }
 
@@ -410,6 +512,7 @@ internal sealed class ItemList : PaintedControl
             case Keys.Up: MoveBy(-1); e.Handled = true; break;
             case Keys.Down: MoveBy(1); e.Handled = true; break;
             case Keys.Enter: Activate(); e.Handled = true; break;
+            case Keys.Escape when _dragging: EndDrag(); _dragFrom = -1; e.Handled = true; break;
         }
         base.OnKeyDown(e);
     }
